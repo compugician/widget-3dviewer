@@ -290,6 +290,7 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
             this.setupGridSizeMenu();
             
             this.setupCogMenu();
+            this.setupRotAxisMenu();
             this.setupFpsMenu();
             this.initJog(); //this.setupJog();
             this.initInspect();
@@ -982,6 +983,12 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
             this.showShadow = !this.showShadow; // toggle
             this.drawToolhead();
         },
+        setupRotAxisMenu: function() {
+            $('.com-chilipeppr-widget-3dviewer-settings-rotational-axis').click( this.getRotAxisCoords.bind(this));
+        },
+        getRotAxisCoords: function() {
+            alert("Set Coordinates!");
+        },
         setupFpsMenu: function() {
             $('.com-chilipeppr-widget-3dviewer-settings-fr-5').click(5, this.onFpsClick.bind(this));
             $('.com-chilipeppr-widget-3dviewer-settings-fr-10').click(10, this.onFpsClick.bind(this));
@@ -1417,6 +1424,8 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
             this.animNoSleep();
             this.tweenIsPlaying = false;
             this.tweenPaused = true;
+            
+            //TODO: implement 'A' rotation compensation for visualization of position of the 'head'
             
             if ('x' in data && data.x != null) this.toolhead.position.x = data.x;
             if ('y' in data && data.y != null) this.toolhead.position.y = data.y;
@@ -2817,6 +2826,11 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
             this.lastFeedrate = null;
             this.isUnitsMm = true;
             
+            //the point on XY plane by which A axis turns
+            this.rotX = 159.5;
+            this.rotY = 165.2;
+            this.lastA = 0;
+            
             this.parseLine = function (text, info) {
                 //text = text.replace(/;.*$/, '').trim(); // Remove comments
                 //text = text.replace(/\(.*$/, '').trim(); // Remove comments
@@ -2960,7 +2974,31 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                                 //if (args.feedrate 
                             }
                             
-                            //console.log("about to call handler. args:", args, "info:", info, "this:", this);
+                            console.log("about to call handler. args:", args, "info:", info, "this:", this);
+                            
+                            //handle A axis rotation
+                            // this.rotX = 159.5;
+                            // this.rotY = 165.2;
+                            // this.lastA = 0;
+                            
+                            //this.rotX = 0;
+                            //this.rotY = 0;
+                            //x′=xcos⁡θ−ysin⁡θ
+                            //y′=ycosθ+xsinθ
+                            
+                            if (true) { //todo - figure out the condition here. What do we do if the line has only x, only y, etc.
+                                //todo ORDER of -rotX / +rotX or vice versa?
+                                if (args.a !== undefined) {
+                                    this.lastA = args.a;
+                                } else {
+                                    args.a = this.lastA; //UNLESS WE ARE IN RELATIVE MODE... IN WHICH CASE IT IS 0? //TODO: care of G90vsG91
+                                }
+                                var aRads = (-1*(args.a)*Math.PI/180.0);
+                                var oldX = args.x - this.rotX;
+                                var oldY = args.y - this.rotY;
+                                args.x = (oldX) * Math.cos(aRads) - (oldY) * Math.sin(aRads) + this.rotX;
+                                args.y = (oldY) * Math.cos(aRads) + (oldX) * Math.sin(aRads) + this.rotY;
+                            }
                             
                             return handler(args, info, this);
                         } else {
@@ -3234,7 +3272,7 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                     p2: p2,
                     'args': args
                 });
-
+              //  console.log("args: "); console.log(args); console.log(p1); console.log(p2);
                 var group = this.getLineGroup(p2, args);
                 var geometry = group.geometry;
 
@@ -3391,7 +3429,7 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                     geometry.colors.push(group.color);
                     geometry.colors.push(group.color);
                     */
-                } else {
+                } else {//TODO: is this the right place to add rotation?
                     geometry.vertices.push(
                         new THREE.Vector3(p1.x, p1.y, p1.z));
                     geometry.vertices.push(
@@ -3582,6 +3620,7 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                         z: args.z !== undefined ? cofg.absolute(lastLine.z, args.z) + cofg.offsetG92.z : lastLine.z,
                         e: args.e !== undefined ? cofg.absolute(lastLine.e, args.e) + cofg.offsetG92.e : lastLine.e,
                         f: args.f !== undefined ? cofg.absolute(lastLine.f, args.f) : lastLine.f,
+                        a: args.a !== undefined ? cofg.absolute(lastLine.a, args.a) : lastLine.a
                     };
                     newLine.g0 = true;
                     //cofg.newLayer(newLine);
@@ -3598,6 +3637,8 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                     // to the point (90.6, 13.8), extruding material as the move
                     // happens from the current extruded length to a length of
                     // 22.4 mm.
+                    
+                    
 
                     var newLine = {
                         x: args.x !== undefined ? cofg.absolute(lastLine.x, args.x) + cofg.offsetG92.x : lastLine.x,
@@ -3605,8 +3646,11 @@ cpdefine('inline:com-chilipeppr-widget-3dviewer', ['chilipeppr_ready', 'Three', 
                         z: args.z !== undefined ? cofg.absolute(lastLine.z, args.z) + cofg.offsetG92.z : lastLine.z,
                         e: args.e !== undefined ? cofg.absolute(lastLine.e, args.e) + cofg.offsetG92.e : lastLine.e,
                         f: args.f !== undefined ? cofg.absolute(lastLine.f, args.f) : lastLine.f,
-
+                        a: args.a !== undefined ? cofg.absolute(lastLine.a, args.a) : lastLine.a
                     };
+                    
+                    
+                    
                     /* layer change detection is or made by watching Z, it's made by
          watching when we extrude at a new Z position */
                     if (cofg.delta(lastLine.e, newLine.e) > 0) {
